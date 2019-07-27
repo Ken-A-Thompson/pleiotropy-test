@@ -95,7 +95,7 @@ filter_diff_traits <- function(traittypes) {
     mutate(crosscat = "F2") # add a label because these are all data from F2s
 }
 
-filter_stats_only <- function(data) {
+filter_stats_and_SD <- function(data) {
   divergence_and_transgression_df <- data %>% 
     filter(Species_or_CrossType == "F1") %>% # start by looking only at F1; Parent data are associated
     left_join(., nis_traits_different_or_not) %>% # now bring in the dataset asking if traits are different or not
@@ -104,9 +104,9 @@ filter_stats_only <- function(data) {
     hablar::rationalize(max_SD_diff) %>%  # convert infinite to NA
     group_by(StudyID, Cross_ID) %>% # grouping variables for pipe
     summarise(mean_sds_diff_divergent_traits = 
-                mean(max_SD_diff[match('TRUE', parents_different_stats)], na.rm = T),
+                mean(max_SD_diff[match('TRUE', parents_different_stats_and_SD)], na.rm = T),
               mean_sds_diff_non_divergent_traits = 
-                mean(max_SD_diff[match('FALSE', parents_different_stats)], na.rm = T)) %>% 
+                mean(max_SD_diff[match('FALSE', parents_different_stats_and_SD)], na.rm = T)) %>% 
     na.omit()
   
   # we need to reduce this dataset to studies that have F1s and F2s.
@@ -114,7 +114,7 @@ filter_stats_only <- function(data) {
     filter(Species_or_CrossType %in% c("F1", "F2")) %>%
     left_join(., nis_traits_different_or_not) %>%
     filter(TraitType == "Morphology") %>% # only include morphological data
-    filter(parents_different_stats == F) %>% 
+    filter(parents_different_stats_and_SD == F) %>% 
     group_by(StudyID, Cross_ID, Cross_Dir, Sex) %>% 
     mutate(segregation_variance = SD[match('F2', Species_or_CrossType)]^2 / SD[match('F1', Species_or_CrossType)]^2) %>% 
     group_by(StudyID, Cross_ID) %>% 
@@ -131,18 +131,43 @@ filter_stats_only <- function(data) {
 #%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%#
 
+# compare_segvar_df
+compare_segvar_df <- nis_traits_SD %>% 
+  left_join(., nis_traits_different_or_not) %>%
+  filter(parents_different_stats_and_SD == F) %>% 
+  filter(Species_or_CrossType %in% c("F1", "F2")) %>%
+  group_by(TraitType, StudyID, Cross_ID, Cross_Dir, Sex, TraitDesc) %>% 
+  select(Species_or_CrossType, SD) %>% 
+  spread(key = Species_or_CrossType, value = SD) %>% 
+  mutate(segregation_variance = F2 / F1) %>% 
+  group_by(TraitType, StudyID, Cross_ID) %>% 
+  summarise(segregation_variance = mean(segregation_variance, na.rm = T)) %>% 
+  na.omit()
+  hablar::rationalize(segregation_variance) #%>%  # convert infinite to NA
+  # group_by(TraitType) 
+  # summarise(segregation_variance = mean(segregation_variance, na.rm = T)) %>%
+  # select(TraitType, segregation_variance) %>%
+  # na.omit()
+  # 
+segvar_aov <- aov(segregation_variance ~ TraitType, compare_segvar_df)
+TukeyHSD(segvar_aov)
+
 # create a dataset that has studies with divergent and non divergent traits 
 divergence_and_transgression_df <- nis_traits_std %>% 
   dplyr::filter(Species_or_CrossType == "F1") %>% # start by looking only at F1; Parent data are associated
   left_join(., nis_traits_different_or_not) %>% # now bring in the dataset asking if traits are different or not
   # filter(parents_different_stats == T) %>% filter to restrict dataset to traits that are different at P < 0.05
   filter(TraitType %in% c("Morphology")) %>% # only include morphological traits
+  # filter(TraitType != "Physiology") %>%
   hablar::rationalize(max_SD_diff) %>%  # convert infinite to NA
   group_by(StudyID, Cross_ID) %>% # grouping variables for pipe
-  summarise(mean_sds_diff_divergent_traits = 
-              mean(max_SD_diff[match('TRUE', parents_different_stats)], na.rm = T), # mean divergence of traits that are / are not different
-            mean_sds_diff_non_divergent_traits = 
-              mean(max_SD_diff[match('FALSE', parents_different_stats)], na.rm = T)) %>% 
+  select(max_SD_diff, parents_different_stats) %>% 
+  group_by(StudyID, Cross_ID, parents_different_stats) %>% 
+  summarise(mean_SD_diff = mean(max_SD_diff, na.rm = T)) %>% 
+  spread(key = parents_different_stats, value = mean_SD_diff) %>% 
+  select(-`<NA>`) %>% 
+  rename(mean_sds_diff_non_divergent_traits = `FALSE`,
+         mean_sds_diff_divergent_traits = `TRUE`) %>% 
   na.omit()
 
 # we need to reduce this dataset to studies that have F1s and F2s.
@@ -150,10 +175,17 @@ divergence_and_transgression_df_segvar <- nis_traits_SD %>%
   filter(Species_or_CrossType %in% c("F1", "F2")) %>%
   left_join(., nis_traits_different_or_not) %>%
   filter(TraitType %in% c("Morphology")) %>% # only include morphological traits
+  # filter(TraitType != "Physiology") %>%
   # filter(TraitType != "Behaviour") %>%
   filter(parents_different_stats == F) %>% 
+  group_by(StudyID, Cross_ID, Cross_Dir, Sex, TraitNo) %>% 
+  select(Species_or_CrossType, TraitNo, SD) %>% 
+  filter(Species_or_CrossType %in% c("F1", "F2")) %>%
   group_by(StudyID, Cross_ID, Cross_Dir, Sex) %>% 
-  mutate(segregation_variance = SD[match('F2', Species_or_CrossType)]^2 / SD[match('F1', Species_or_CrossType)]^2) %>% 
+  select(Species_or_CrossType, SD, TraitNo) %>% 
+  spread(key = Species_or_CrossType, value = SD) %>% 
+  mutate(segregation_variance = F2^2 / F1^2) %>%
+  # mutate(segregation_variance = F2 / F1) %>%
   group_by(StudyID, Cross_ID) %>% 
   summarise(mean_segvar_non_diff = mean(segregation_variance, na.rm = T)) %>% 
   left_join(., divergence_and_transgression_df) %>% 
@@ -166,7 +198,7 @@ divergence_and_transgression_df_segvar <- nis_traits_SD %>%
 divergence_and_transgression_df_bc <- nis_traits_SD %>% 
   filter(Species_or_CrossType %in% c("F1", "BC")) %>%
   left_join(., nis_traits_different_or_not) %>%
-  filter(TraitType %in% c("Morphology")) %>% # only include morphological data
+  filter(TraitType %in% c("Morphology", "Pigment")) %>% # only include morphological data
   filter(parents_different_stats == F) %>% 
   group_by(StudyID, Cross_ID, Cross_Dir, Sex) %>% 
   mutate(segregation_variance = 1.33 * SD[match('BC', Species_or_CrossType)]^2 / SD[match('F1', Species_or_CrossType)]^2) %>% 
@@ -182,7 +214,7 @@ divergence_and_transgression_df_bc <- nis_traits_SD %>%
 divergence_and_transgression_df_both <- rbind(divergence_and_transgression_df_segvar, divergence_and_transgression_df_bc)
 
 # vector containing list of studies.
-study_list_master <- divergence_and_transgression_df_both$StudyID
+study_list_master <- divergence_and_transgression_df_segvar$StudyID
 
 # add in the genetic distance data 
 divergence_and_transgression_df_segvar_gendist <- divergence_and_transgression_df_segvar %>% 
@@ -197,7 +229,7 @@ data_for_dryad <- nis_traits_std %>%
 
 # generate a list of traits in the studies
 study_traits <- data_for_dryad %>% 
-  # filter(TraitType == "Morphology & Life_history") %>% 
+  filter(TraitType %in% c("Morphology", "Pigment")) %>%
   select(StudyID, TraitDesc, TraitType) %>% 
   unique()
 
@@ -292,7 +324,7 @@ nis_traits_diff_int_allstudies <- nis_traits_std %>%
   filter(Species_or_CrossType == "F1") %>% # start by looking only at F1; Parent data are associated
   left_join(., nis_traits_different_or_not) %>% # now bring in the dataset asking if traits are different or not
   # filter(parents_different_stats == T) %>% filter to restrict dataset to traits that are different at P < 0.05
-  filter(TraitType %in% c("Morphology", "Life_history")) %>% # only include morphological data & life history
+  filter(TraitType %in% c("Morphology")) %>% # only include morphological data & life history
   hablar::rationalize(max_SD_diff) %>%  # convert infinite to NA
   group_by(studycross, StudyID, Cross_ID) %>% # grouping variables for pipe
   summarise(mean_sds_diff_divergent_traits = 
@@ -320,23 +352,35 @@ nis_traits_diff_int_allstudies <- nis_traits_std %>%
 #%%%%%%%%%%%%%#
 
 # # Spearman's rank-order correlation
-# spearman.test(divergence_and_transgression_df_segvar$mean_sds_diff_divergent_traits, divergence_and_transgression_df_segvar$mean_segvar_non_diff)
-# spearman.test(divergence_and_transgression_df_segvar$mean_sds_diff_non_divergent_traits, divergence_and_transgression_df_segvar$mean_segvar_non_diff)
+spearman.test(divergence_and_transgression_df_segvar$mean_sds_diff_divergent_traits, divergence_and_transgression_df_segvar$mean_segvar_non_diff)
+spearman.test(divergence_and_transgression_df_segvar$mean_sds_diff_non_divergent_traits, divergence_and_transgression_df_segvar$mean_segvar_non_diff)
 
 # main linear models; univariate
 # running with and without transformation so I can show diagnostics
 hypothesis_lm_log <- lm(log(mean_segvar_non_diff) ~ log(mean_sds_diff_divergent_traits), data = divergence_and_transgression_df_segvar)
-hypothesis_lm_not <- lm(mean_segvar_non_diff ~ mean_sds_diff_divergent_traits, data = divergence_and_transgression_df_segvar)
+hypothesis_lm_not <- lm(mean_segvar_non_diff ~ I(mean_sds_diff_divergent_traits^2), data = divergence_and_transgression_df_segvar)
 
 ## summarize the main model
 summary(hypothesis_lm_log)
+summary(hypothesis_lm_not)
+
 
 # run a model with non-divergent traits as predictor
 alternative_lm <- lm(log(mean_segvar_non_diff) ~ log1p(mean_sds_diff_non_divergent_traits), data = divergence_and_transgression_df_segvar)
 summary(alternative_lm) # analysis
 
-# there are insufficient datapoints for a robust multiple regression, but it is here if desired.
-# summary(lm(log(mean_segvar_non_diff) ~ log1p(mean_sds_diff_non_divergent_traits) + log(mean_sds_diff_divergent_traits), data = divergence_and_transgression_df_segvar))
+# multiple regression
+multiple_lm <-  lm(log(mean_segvar_non_diff) ~ log1p(mean_sds_diff_non_divergent_traits) + log(mean_sds_diff_divergent_traits), data = divergence_and_transgression_df_segvar)
+
+summary(multiple_lm)
+
+# install.packages('rsq')
+# library(rsq)
+rsq.partial(alternative_lm, multiple_lm)
+
+summary(lm(log(mean_sds_diff_divergent_traits) ~ log1p(mean_sds_diff_non_divergent_traits), data = divergence_and_transgression_df_segvar))
+
+divergence_and_transgression_df_segvar
 
 #%%%%%%%%%%%%%%%%%%%%%%%%#
 # genetic distance tests # 
@@ -449,7 +493,7 @@ segregation_variance_phenotype <-
 # segregation_variance_phenotype
 
 segregation_variance_phenotype_non_divergent_fig <- ggplot(divergence_and_transgression_df_segvar, 
-         aes(x = log1p(mean_sds_diff_non_divergent_traits), y = log(mean_segvar_non_diff))) +
+         aes(x = log(mean_sds_diff_non_divergent_traits), y = log(mean_segvar_non_diff))) +
   xlab("ln(phenotypic distance (SDs)\nof non-divergent traits + 1)") +
   ylab("ln(segregation variance of\nnon-divergent traits)") +
   geom_point() +
@@ -717,16 +761,14 @@ ggsave(different_traits_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms
 
 # function to filter by stats alone
 
-only_stats_diff_df <- filter_stats_only(nis_traits_std)
+stats_and_or_SD_diff_df <- filter_stats_and_SD(nis_traits_std)
 
 
 # main linear models; univariate
-# running with and without transformation so I can show diagnostics
-hypothesis_lm_log_STATSONLY <- lm(log(mean_segvar_non_diff) ~ log(mean_sds_diff_divergent_traits), data = only_stats_diff_df)
-hypothesis_lm_not_STATSONLY <- lm(mean_segvar_non_diff ~ mean_sds_diff_divergent_traits, data = only_stats_diff_df)
+hypothesis_lm_log_stats_or_SD <- lm(log(mean_segvar_non_diff) ~ log(mean_sds_diff_divergent_traits), data = stats_and_or_SD_diff_df)
 
 ## summarize the main model
-summary(hypothesis_lm_log_STATSONLY)
+summary(hypothesis_lm_log_stats_or_SD)
 
 # run a model with non-divergent traits as predictor
 alternative_lm_STATSONLY <- lm(log(mean_segvar_non_diff) ~ log1p(mean_sds_diff_non_divergent_traits), data = only_stats_diff_df)
@@ -740,19 +782,17 @@ stats_only_fig_div <- simple_lm_fig_function(only_stats_diff_df) +
   annotate("text", label = expression(paste(italic("P"), " = 0.0169; ",
                                             italic("r")^2, " = 0.3659")), x = 0.5, y = 2.5, size = 6)
 
-stats_only_fig_NONdiv <- 
-  ggplot(only_stats_diff_df, 
-         aes(x = log1p(mean_sds_diff_non_divergent_traits), y = log(mean_segvar_non_diff))) +
+stats_or_SD_binning_fig <- 
+  ggplot(stats_and_or_SD_diff_df, 
+         aes(x = log1p(mean_sds_diff_divergent_traits), y = log(mean_segvar_non_diff))) +
   xlab("ln(phenotypic distance [SDs]\nof divergent traits)") +
   ylab("ln(segregation variance of\nnon-divergent traits)") +
   geom_point() +
   geom_smooth(method = "lm", se = F, colour = "black") +
   theme_KT_FGM + 
-  theme(aspect.ratio = 3/4) + 
-  annotate("text", label = expression(paste(italic("P"), " = 0.124; ",
-                                          italic("r")^2, " = 0.172")), x = 0.8, y = 2.5, size = 6)
+  theme(aspect.ratio = 3/4)
 
-stats_only_fig <- plot_grid(stats_only_fig_div, stats_only_fig_NONdiv, labels = "AUTO", ncol = 2)
-ggsave(stats_only_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/fig2_but_stats_only.pdf', height = 5, width = 9)
+# stats_only_fig <- plot_grid(stats_only_fig_div, stats_only_fig_NONdiv, labels = "AUTO", ncol = 2)
+ggsave(stats_or_SD_binning_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/fig2_but_stats_or_SD.pdf', height = 3, width = 4)
 
 summary(lm(log(mean_segvar_non_diff) ~ log(mean_sds_diff_divergent_traits), only_stats_diff_df))
