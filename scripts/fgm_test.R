@@ -8,6 +8,8 @@
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%#
 
+# note for users during review process: I am saving Figures to a local overleaf directory because it's synced to my manuscript preparation system. this won't work on your machine but if you do really want to save rather than view the figures just change to a directory that exists on your machine.
+
 # uncomment to install
 # install.packages('devtools')
 # install.packages('ggfortify')
@@ -30,20 +32,20 @@ library(phytools)
 #### load data ####
 #%%%%%%%%%%%%%%%%%#
 
-GenDist_All <- read.csv(file = 'NIS_Analysis/data/GenDist_Data_All.csv')
-nis_traits_std <- read_csv(file = 'NIS_Analysis/data/nis_traits_std.csv')
-nis_traits_SD <- read_csv(file = 'NIS_Analysis/data/nis_traits_SD.csv')
-nis_traits_different_or_not <- read_csv('NIS_Analysis/data/nis_traits_different_or_not.csv')
-nis_species_intra_inter <- read_csv('NIS_Analysis/data/nis_species_intra_inter.csv')
-phyloT_tree <- read.newick('NIS_Analysis/phylogeny/2019-03-02_phyloT_generated_tree_1551546803_newick.txt') # tree from PhyloT; more spp no BL
+GenDist_All <- read.csv(file = 'data/GenDist_Data_All.csv')
+nis_traits_std <- read_csv(file = 'data/nis_traits_std.csv')
+nis_traits_SD <- read_csv(file = 'data/nis_traits_SD.csv')
+nis_traits_different_or_not <- read_csv('data/nis_traits_different_or_not.csv')
+nis_species_intra_inter <- read_csv('data/nis_species_intra_inter.csv')
+phyloT_tree <- read.newick('data/2019-03-02_phyloT_generated_tree_1551546803_newick.txt') # tree from PhyloT; more spp no BL
 # timetree_tree
-timetree_dt_data <- read.csv(file = '!FGM_Test_Offshoot/data/FILLED_timetree_data.csv')
+timetree_dt_data <- read.csv(file = 'data/FILLED_timetree_data.csv')
 
 
 # simulation data
-no_p_sim_data <- read_csv(file = '!FGM_Test_Offshoot/simulations/data/no_p_phenotypes_n2_K1000_pmut0.1_alpha0.1_B2_u0.001.csv', col_names = c('ind_no', 'rep', 'nmuts', 'dist', 't1', 't2'))
-p_lg_sim_data <- read_csv(file = '!FGM_Test_Offshoot/simulations/data/p_lg_phenotypes_n2_K1000_pmut0.1_alpha0.1_B2_u0.001.csv', col_names = c('ind_no', 'rep', 'nmuts', 'dist', 't1', 't2'))
-p_sm_sim_data <- read_csv(file = '!FGM_Test_Offshoot/simulations/data/p_sm_phenotypes_n2_K1000_pmut0.1_alpha0.0_B2_u0.100.csv', col_names = c('ind_no', 'rep', 'nmuts', 'dist', 't1', 't2'))
+no_p_sim_data <- read_csv(file = 'simulations/data/no_p_phenotypes_n2_K1000_pmut0.1_alpha0.1_B2_u0.001.csv', col_names = c('ind_no', 'rep', 'nmuts', 'dist', 't1', 't2'))
+p_lg_sim_data <- read_csv(file = 'simulations/data/p_lg_phenotypes_n2_K1000_pmut0.1_alpha0.1_B2_u0.001.csv', col_names = c('ind_no', 'rep', 'nmuts', 'dist', 't1', 't2'))
+p_sm_sim_data <- read_csv(file = 'simulations/data/p_sm_phenotypes_n2_K1000_pmut0.1_alpha0.0_B2_u0.100.csv', col_names = c('ind_no', 'rep', 'nmuts', 'dist', 't1', 't2'))
 
 #%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%#
@@ -208,7 +210,7 @@ crosses_for_timetree <- nis_species_intra_inter %>%
   filter(intra_inter == "inter") %>% 
   gather(`sp 1`:`sp 2`, key = "species", value = "name")
 
-write.table(crosses_for_timetree$name, file = '!FGM_Test_Offshoot/data/timetree.txt',
+write.table(crosses_for_timetree$name, file = 'data/timetree.txt',
             row.names = F,
             quote = F,
             col.names = F)
@@ -217,7 +219,7 @@ crosses_for_timetree_entry <- nis_species_intra_inter %>%
   filter(intra_inter == "inter") %>% 
   select(-intra_inter)
 
-write_csv(crosses_for_timetree_entry, path = '!FGM_Test_Offshoot/data/timetree_data_entry_template.csv')
+write_csv(crosses_for_timetree_entry, path = 'data/timetree_data_entry_template.csv')
 
 # only retain plant/animal info
 PA_data <- GenDist_All %>% 
@@ -347,8 +349,6 @@ summary(aov(mean_sds_diff_divergent_traits ~ intra_inter, data = divergence_and_
 # pylogenetic signal # 
 #%%%%%%%%%%%%%%%%%%%%%%%%#
 
-# currently have given up...
-
 # # phytools uses SPECIES as rownames (ick)
 #
 Study_Species_DF_FULL <- divergence_and_transgression_df_segvar %>%
@@ -364,7 +364,7 @@ Study_Species_DF_FULL <- divergence_and_transgression_df_segvar %>%
 # library(treeplyr)
 
 # load TIMETREE
-timetree_tree <- read.tree('!FGM_Test_Offshoot/data/timetree.nwk')
+# timetree_tree <- read.tree('!FGM_Test_Offshoot/data/timetree.nwk')
 # try make.treedata from treeplyr
 # td <- make.treedata(tree = timetree_tree, data = )
 
@@ -378,10 +378,10 @@ mean_p_div_DF <- Study_Species_DF_FULL %>%
 rownames(mean_segvar_non_diff_DF) <- Study_Species_DF_FULL$species
 rownames(mean_p_div_DF) <- Study_Species_DF_FULL$species
 
-
 species_to_retain <- as.vector(rownames(mean_segvar_non_diff_DF))
 
 # THIS SEEMS TO WORK!
+# create data input for phytools::phloysig
 trait_segvar <- as.vector(t(log(mean_segvar_non_diff_DF[,1])))
 names(trait_segvar) <- rownames(mean_segvar_non_diff_DF)
 
@@ -392,7 +392,7 @@ trait_div <- as.vector(t(log(Study_Species_DF_FULL[,4])))
 names(trait_div) <- rownames(mean_p_div_DF)
 
 
-pruned.tree <- drop.tip(phyloT_tree, setdiff(tree$tip.label, species_to_retain));
+pruned.tree <- drop.tip(phyloT_tree, setdiff(phyloT_tree$tip.label, species_to_retain));
 # # set branch lengths to random
 pruned.tree$edge.length <- rep(0.2, 2 * phyloT_tree$Nnode)
 
@@ -462,8 +462,8 @@ segregation_variance_phenotype_non_divergent_fig <- ggplot(divergence_and_transg
 
 summary(lm(log(mean_segvar_non_diff) ~ log1p(mean_sds_diff_non_divergent_traits), divergence_and_transgression_df_segvar))
 
-ggsave(segregation_variance_phenotype, filename = '../../Apps/Overleaf/pleiotropy_ms/Figures/pleiotropy_Figure_2.pdf', height = 4, width = 5)
-ggsave(segregation_variance_phenotype_non_divergent_fig, filename = '../../Apps/Overleaf/pleiotropy_ms/Figures/non_divergent_traits.pdf', height = 4, width = 5)
+ggsave(segregation_variance_phenotype, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/pleiotropy_Figure_2.pdf', height = 4, width = 5)
+ggsave(segregation_variance_phenotype_non_divergent_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/non_divergent_traits.pdf', height = 4, width = 5)
 
 #%%%%%%%%%%%%%#
 # SIMULATIONS #
@@ -551,7 +551,7 @@ NONdivergent_no_p <-
 sims_fig <- plot_grid(NONdivergent_p_sm, NONdivergent_no_p, NONdivergent_p_lg, 
                       divergent_p_sm, divergent_no_p, divergent_p_lg, labels = "AUTO")
 # save it
-ggsave(sims_fig, filename = '../../Apps/Overleaf/pleiotropy_ms/Figures/sims_fig.pdf', height = 7, width = 10)
+ggsave(sims_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/sims_fig.pdf', height = 7, width = 10)
 
 #%%%%%%%%%%%%%#
 # DIAGNOSTICS #
@@ -562,8 +562,8 @@ log_diagnostics_fig <- autoplot(hypothesis_lm_log)
 raw_diagnostics_fig <- autoplot(hypothesis_lm_not)
 
 # save em
-ggsave(log_diagnostics_fig, filename = '../../Apps/Overleaf/pleiotropy_ms/Figures/log_diagnostics_fig.pdf', height = 5, width = 5)
-ggsave(raw_diagnostics_fig, filename = '../../Apps/Overleaf/pleiotropy_ms/Figures/raw_diagnostics_fig.pdf', height = 5, width = 5)
+ggsave(log_diagnostics_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/log_diagnostics_fig.pdf', height = 5, width = 5)
+ggsave(raw_diagnostics_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/raw_diagnostics_fig.pdf', height = 5, width = 5)
 
 #%%%%%%%%%%#
 # RAW DATA #
@@ -593,7 +593,7 @@ segregation_variance_phenotype_non_divergent_fig_RAW <-
 summary(lm(mean_segvar_non_diff ~ mean_sds_diff_divergent_traits, divergence_and_transgression_df_segvar))
 
 raw_data_fig <- plot_grid(segregation_variance_phenotype_RAW, segregation_variance_phenotype_non_divergent_fig_RAW, labels = "AUTO")
-ggsave(raw_data_fig, filename = '../../Apps/Overleaf/pleiotropy_ms/Figures/raw_data_fig.pdf', height = 4, width = 7)
+ggsave(raw_data_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/raw_data_fig.pdf', height = 4, width = 7)
 
 #%%%%%%%%%%#
 # WITH BCS #
@@ -631,7 +631,7 @@ summary(lm(log(mean_segvar_non_diff) ~ log1p(mean_sds_diff_non_divergent_traits)
 
 withBCs_fig <- plot_grid(segregation_variance_phenotype_BC, segregation_variance_phenotype_non_divergent_fig_BC, labels = "AUTO")
 
-ggsave(withBCs_fig, filename = '../../Apps/Overleaf/pleiotropy_ms/Figures/withBCs_fig.pdf', height = 5, width = 9)
+ggsave(withBCs_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/withBCs_fig.pdf', height = 5, width = 9)
 
 #%%%%%%%%%%#
 # GEN DIST #
@@ -678,7 +678,7 @@ Divergence_Time_Fig <- ggplot(divergence_time_trait_DF, aes(x = estimated_time_t
   theme_KT_FGM
 
 gendist_fig <- plot_grid(Intra_Inter_Reduced_Fig, Intra_Inter_All_Fig, Gendist_Cont_Fig, Divergence_Time_Fig, labels = "AUTO", ncol = 2)
-ggsave(gendist_fig, filename = '../../Apps/Overleaf/pleiotropy_ms/Figures/gendist_fig.pdf', height = 6, width = 6)
+ggsave(gendist_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/gendist_fig.pdf', height = 6, width = 6)
 
 # OK, what I want to do is:
 # Figure out which studies use the SAME SPECIES (regardless of subspecies) as their parents
@@ -709,7 +709,7 @@ all_traits_fig <- simple_lm_fig_function(all_traits_data)
 m_l_fig <- simple_lm_fig_function(m_l_data)
 
 different_traits_fig <- plot_grid(all_traits_fig, m_l_pig_fig, m_l_fig, labels = "AUTO", ncol = 2)
-ggsave(different_traits_fig, filename = '../../Apps/Overleaf/pleiotropy_ms/Figures/different_traits_fig.pdf', height = 5, width = 9)
+ggsave(different_traits_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/different_traits_fig.pdf', height = 5, width = 9)
 
 #%% %%%% %%%%% %%%% %%#
 # ALTERNATIVE BINNING #
@@ -753,6 +753,6 @@ stats_only_fig_NONdiv <-
                                           italic("r")^2, " = 0.172")), x = 0.8, y = 2.5, size = 6)
 
 stats_only_fig <- plot_grid(stats_only_fig_div, stats_only_fig_NONdiv, labels = "AUTO", ncol = 2)
-ggsave(stats_only_fig, filename = '../../Apps/Overleaf/pleiotropy_ms/Figures/fig2_but_stats_only.pdf', height = 5, width = 9)
+ggsave(stats_only_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/fig2_but_stats_only.pdf', height = 5, width = 9)
 
 summary(lm(log(mean_segvar_non_diff) ~ log(mean_sds_diff_divergent_traits), only_stats_diff_df))
