@@ -52,7 +52,7 @@ p_sm_sim_data <- read_csv(file = 'simulations/data/p_sm_phenotypes_n2_K1000_pmut
 #### functions ####
 #%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%#
-
+nis_traits_SD$Species_or_CrossType <- as.character(nis_traits_SD$Species_or_CrossType)
 # creates summary statistics for particular trait types binning by stats AND SD
 alternative_filtering_function_stats_SD <- function(trait_type){
   
@@ -158,6 +158,105 @@ alternative_filtering_function_stats <- function(trait_type){
     mutate(studycross = paste(StudyID, Cross_ID, sep = " "))
   return(df2)
 }
+
+# creates summary statistics for particular trait types but not transformation
+no_log_filter <- function(trait_type){
+  
+  # create a dataset that has studies with divergent and non divergent traits 
+  df1 <- nis_traits_std %>% 
+    dplyr::filter(Species_or_CrossType == "F1") %>% # start by looking only at F1; Parent data are associated
+    left_join(., nis_traits_different_or_not) %>% # now bring in the dataset asking if traits are different or not
+    filter(TraitType %in% trait_type) %>% # only include morphological & pigment traits
+    hablar::rationalize(max_SD_diff) %>%  # convert infinite to NA
+    group_by(StudyID, Cross_ID) %>% # grouping variables for pipe
+    select(max_SD_diff, parents_different_stats) %>% 
+    group_by(StudyID, Cross_ID, parents_different_stats) %>% 
+    summarise(mean_SD_diff = mean((max_SD_diff), na.rm = T)) %>% 
+    spread(key = parents_different_stats, value = mean_SD_diff) %>% 
+    select(-`<NA>`) %>% 
+    rename(mean_sds_diff_non_divergent_traits = `FALSE`,
+           mean_sds_diff_divergent_traits = `TRUE`) %>% 
+    na.omit()
+  
+  # we need to reduce this dataset to studies that have F1s and F2s.
+  df2 <- nis_traits_SD %>% 
+    left_join(., nis_traits_different_or_not) %>%
+    filter(StudyID %in% df1$StudyID) %>% 
+    filter(TraitType %in% trait_type) %>% # only include morphological & pigment traits
+    mutate(Species_or_CrossType = ifelse(!Species_or_CrossType %in% c("F1", "F2", "BC"), NA, Species_or_CrossType)) %>% 
+    mutate(Species_or_CrossType = coalesce(Species_or_CrossType, ParentID)) %>% 
+    filter(parents_different_stats == F) %>% 
+    group_by(StudyID, Cross_ID, Cross_Dir, Sex, TraitNo) %>% 
+    select(Species_or_CrossType, TraitNo, SD) %>% 
+    # filter(Species_or_CrossType %in% c("F1", "F2")) %>%
+    group_by(StudyID, Cross_ID, Sex, Species_or_CrossType, TraitNo) %>% 
+    summarise(SD = mean(SD, na.rm = T)) %>% 
+    group_by(StudyID, Cross_ID, Species_or_CrossType, TraitNo) %>% 
+    summarise(SD = mean(SD, na.rm = T)) %>% # average across sexes
+    select(Species_or_CrossType, SD, TraitNo) %>%
+    spread(key = Species_or_CrossType, value = SD) %>% 
+    mutate(diff_segregation_variance_alternative = F2^2 - F1^2) %>%
+    mutate(diff_segregation_variance = 4 * F2^2 - ((2 * (F1^2) + A^2 + B^2 ))) %>% 
+    mutate(segregation_variance_alternative = F2^2 / F1^2) %>%
+    mutate(segregation_variance = 4 * F2^2 / ((2 * (F1^2) + A^2 + B^2 ))) %>% 
+    group_by(StudyID, Cross_ID) %>% 
+    summarise(mean_segvar_non_diff = mean((segregation_variance), na.rm = T),
+              mean_segvar_non_diff_alt = mean(log1p(segregation_variance_alternative), na.rm = T),
+              mean_segvar_eq1_diff = mean(log1p(diff_segregation_variance), na.rm = T),
+              mean_segvar_alt_diff = mean(log1p(diff_segregation_variance_alternative), na.rm = T)
+    ) %>% 
+    left_join(., df1) %>% 
+    select(StudyID, Cross_ID, mean_segvar_non_diff, mean_segvar_non_diff_alt, mean_sds_diff_divergent_traits, mean_sds_diff_non_divergent_traits, mean_segvar_alt_diff, mean_segvar_eq1_diff)  %>% 
+    na.omit() %>% 
+    mutate(studycross = paste(StudyID, Cross_ID, sep = " "))
+  return(df2)
+}
+
+min_sd_filter <- function(){
+  
+  # create a dataset that has studies with divergent and non divergent traits 
+  df1 <- nis_traits_std %>% 
+    dplyr::filter(Species_or_CrossType == "F1") %>% # start by looking only at F1; Parent data are associated
+    left_join(., nis_traits_different_or_not) %>% # now bring in the dataset asking if traits are different or not
+    filter(TraitType == "Morphology") %>% # only include morphological & pigment traits
+    hablar::rationalize(min_SD_diff) %>%  # convert infinite to NA
+    group_by(StudyID, Cross_ID) %>% # grouping variables for pipe
+    select(min_SD_diff, parents_different_stats) %>% 
+    group_by(StudyID, Cross_ID, parents_different_stats) %>% 
+    summarise(mean_SD_diff = mean(log1p(min_SD_diff), na.rm = T)) %>% 
+    spread(key = parents_different_stats, value = mean_SD_diff) %>% 
+    select(-`<NA>`) %>% 
+    rename(mean_sds_diff_non_divergent_traits = `FALSE`,
+           mean_sds_diff_divergent_traits = `TRUE`) %>% 
+    na.omit()
+  
+  # we need to reduce this dataset to studies that have F1s and F2s.
+  df2 <- nis_traits_SD %>% 
+    left_join(., nis_traits_different_or_not) %>%
+    filter(StudyID %in% df1$StudyID) %>% 
+    filter(TraitType == "Morphology") %>% # only include morphological & pigment traits
+    mutate(Species_or_CrossType = ifelse(!Species_or_CrossType %in% c("F1", "F2", "BC"), NA, as.character(Species_or_CrossType))) %>% 
+    mutate(Species_or_CrossType = coalesce(Species_or_CrossType, (ParentID))) %>% 
+    filter(parents_different_stats == F) %>% 
+    group_by(StudyID, Cross_ID, Cross_Dir, Sex, TraitNo) %>% 
+    select(Species_or_CrossType, TraitNo, SD) %>% 
+    # filter(Species_or_CrossType %in% c("F1", "F2")) %>%
+    group_by(StudyID, Cross_ID, Sex, Species_or_CrossType, TraitNo) %>% 
+    summarise(SD = mean(SD, na.rm = T)) %>% 
+    group_by(StudyID, Cross_ID, Species_or_CrossType, TraitNo) %>% 
+    summarise(SD = mean(SD, na.rm = T)) %>% # average across sexes
+    select(Species_or_CrossType, SD, TraitNo) %>%
+    spread(key = Species_or_CrossType, value = SD) %>% 
+    mutate(segregation_variance = 4 * F2^2 / ((2 * (F1^2) + A^2 + B^2 ))) %>% 
+    group_by(StudyID, Cross_ID) %>% 
+    summarise(mean_segvar_non_diff = mean(log1p(segregation_variance), na.rm = T)) %>% 
+    left_join(., df1) %>% 
+    select(StudyID, Cross_ID, mean_segvar_non_diff, mean_sds_diff_divergent_traits, mean_sds_diff_non_divergent_traits)  %>% 
+    na.omit() %>% 
+    mutate(studycross = paste(StudyID, Cross_ID, sep = " "))
+  return(df2)
+}
+
 #%%%%%%%%%%%%%%%%%%%%%%%#
 #%%%%%%%%%%%%%%%%%%%%%%%#
 #### data processing ####
@@ -356,6 +455,10 @@ nis_traits_diff_int_allstudies <- nis_traits_std %>%
 # # Spearman's rank-order correlation
 spearman.test(divergence_and_transgression_df_segvar$mean_sds_diff_divergent_traits, divergence_and_transgression_df_segvar$mean_segvar_non_diff)
 spearman.test(divergence_and_transgression_df_segvar$mean_sds_diff_non_divergent_traits, divergence_and_transgression_df_segvar$mean_segvar_non_diff)
+
+# are divergent and non-divergent chars correlated?
+spearman.test(divergence_and_transgression_df_segvar$mean_sds_diff_non_divergent_traits, divergence_and_transgression_df_segvar$mean_sds_diff_divergent_traits)
+
 
 # here are some alternative models that can be uncommented to run
 # # main linear models; univariate
@@ -686,7 +789,10 @@ ggsave(gendist_fig, filename = '../../../../Apps/Overleaf/pleiotropy_ms/Figures/
 stats_or_SD_morph_df <- alternative_filtering_function_stats_SD(trait_type = c("Morphology"))
 stats_morph_df <- alternative_filtering_function_stats(trait_type = c("Morphology"))
 stats_all_df <- alternative_filtering_function_stats(trait_type = c("Morphology", "Life_history", "Behaviour", "Chemical", "Pigment", "Physiology"))
+stats_no_phys_chem_df <- alternative_filtering_function_stats(trait_type = c("Morphology", "Life_history", "Behaviour", "Pigment"))
 
+no_log_df <- no_log_filter(trait_type = c("Morphology"))
+min_sd_df <- min_sd_filter()
 
 # results for table S1
 ## reference
@@ -699,12 +805,21 @@ spearman.test(stats_or_SD_morph_df$mean_sds_diff_divergent_traits, stats_or_SD_m
 spearman.test(stats_morph_df$mean_sds_diff_divergent_traits, stats_morph_df$mean_segvar_eq1_diff)
 
 ## ratio f2 to f1
-spearman.test(stats_morph_df$mean_sds_diff_divergent_traits, stats_morph_df$mean_segvar_non_diff_alt)
+spearman.test(stats_morph_df$mean_sds_diff_divergent_traits, stats_morph_df$mean_segvar_non_diff)
 
 ## difference f2 - f1
-spearman.test(stats_morph_df$mean_sds_diff_divergent_traits, stats_morph_df$mean_segvar_alt_diff)
+spearman.test(stats_morph_df$mean_sds_diff_divergent_traits, stats_morph_df$mean_segvar_non_diff)
 
 # all traits
-spearman.test(stats_all_df$mean_sds_diff_divergent_traits, stats_all_df$mean_segvar_alt_diff)
+spearman.test(stats_all_df$mean_sds_diff_divergent_traits, stats_all_df$mean_segvar_non_diff)
+
+# all traits
+spearman.test(stats_no_phys_chem_df$mean_sds_diff_divergent_traits, stats_no_phys_chem_df$mean_segvar_non_diff)
+
+# no log transformation
+spearman.test(no_log_df$mean_sds_diff_divergent_traits, no_log_df$mean_segvar_non_diff)
+
+#min sd
+spearman.test(min_sd_df$mean_sds_diff_divergent_traits, min_sd_df$mean_segvar_non_diff)
 
 
